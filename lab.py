@@ -120,6 +120,10 @@ class Browser:
 
     def draw(self):
         for x, y, c in self.display_list:
+            if y > HEIGHT + self.scroll:
+                continue
+            if y + VSTEP < self.scroll: # VSTEP 더하는 이유는 글자가 완전히 화면 밖으로 나가는 경우만 스킵하기 위함
+                continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
     def scrolldown(self, event):
