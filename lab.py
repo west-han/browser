@@ -84,14 +84,28 @@ def lex(body):
     return text
 
 WIDTH, HEIGHT = 800, 600
+HSTEP, VSTEP = 13, 18
 
+def layout(text):
+    display_list = []
+    cursor_x, cursor_y = HSTEP, VSTEP
+
+    for c in text:
+        display_list.append((cursor_x, cursor_y, c)) # 렌더링 대상 문자와 레이아웃 상의 좌표 튜플 저장
+        cursor_x += HSTEP
+        if cursor_x >= WIDTH - HSTEP:
+            cursor_x, cursor_y = HSTEP, cursor_y + VSTEP
+
+    return display_list
+
+SCROLL_STEP = 100
 class Browser:
     def __init__(self):
         self.windows = tkinter.Tk() # 데스크톱 환경에 윈도우 생성 요청, 윈도우를 조작하기 위한 객체 반환
-
         self.canvas = tkinter.Canvas(self.windows, width=WIDTH, height=HEIGHT) # 윈도우에 대한 캔버스 생성
-
         self.canvas.pack() # Tk가 캔버스를 창에 배치하기 위해 호출해야 하는 메소드
+        self.scroll = 0
+        self.windows.bind("<Down>", self.scrolldown) # 이벤트핸들러 바인딩
 
     def load(self, url):
         self.canvas.create_rectangle(10, 20, 400, 300)
@@ -101,14 +115,17 @@ class Browser:
         body = url.request()
         text = lex(body)
 
-        HSTEP, VSTEP = 13, 18
-        cursor_x, cursor_y = HSTEP, VSTEP
-        for c in text:
-            self.canvas.create_text(cursor_x, cursor_y, text=c)
-            cursor_x += HSTEP
-            if cursor_x >= WIDTH - HSTEP:
-                cursor_y += VSTEP
-                cursor_x = HSTEP
+        self.display_list = layout(text)
+        self.draw()
+
+    def draw(self):
+        for x, y, c in self.display_list:
+            self.canvas.create_text(x, y - self.scroll, text=c)
+
+    def scrolldown(self, event):
+        self.scroll += SCROLL_STEP
+        self.canvas.delete("all")
+        self.draw()
 
 if __name__ == "__main__":
     import sys
