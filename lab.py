@@ -1,4 +1,5 @@
 import tkinter
+import tkinter.font
 import socket
 import ssl
 
@@ -69,34 +70,74 @@ class URL:
 
         return body
 
+class Text:
+    def __init__(self, text):
+        self.text = text
+
+class Tag:
+    def __init__(self, tag):
+        self.tag = tag
+
 def lex(body):
-    text = ""
+    out = []
+    buffer = ""
 
     in_tag = False
     for c in body:
         if c == "<":
             in_tag = True
+            if buffer: out.append(Text(buffer))
+            buffer = ""
         elif c == ">":
             in_tag = False
+            out.append(Tag(buffer))
+            buffer = ""
         elif not in_tag:
-            # print(c, end='')
-            text += c
-    return text
+            buffer += c
+    if not in_tag and buffer:
+        out.append(Text(buffer)) # 태그로 감싸지 않은 텍스트 flush, 현대 브라우저들의 기본 동작이 미완성 태그를 drop하는 방식이므로 이를 따름
+    return out
 
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 
-def layout(text):
-    display_list = []
-    cursor_x, cursor_y = HSTEP, VSTEP
+class Layout:
+    def __init__(self, tokens):
+        self.display_list = []
+        self.cursor_x = VSTEP
+        self.cursor_y = HSTEP
+        self.weight = "normal"
+        self.style = "roman"
+        for tok in tokens:
+            self.token(tok)
 
-    for c in text:
-        display_list.append((cursor_x, cursor_y, c)) # 렌더링 대상 문자와 레이아웃 상의 좌표 튜플 저장
-        cursor_x += HSTEP
-        if cursor_x >= WIDTH - HSTEP:
-            cursor_x, cursor_y = HSTEP, cursor_y + VSTEP
+    def token(self, tok):
+        if isinstance(tok, Text):
+            for word in tok.text.split():
+                self.word(word)
+        elif tok.tag == "i":
+            self.style = "italic"
+        elif tok.tag == "/i":
+            self.style = "normal"
+        elif tok.tag == "b":
+            self.style = "bold"
+        elif tok.tag == "/b":
+            self.style = "normal"
 
-    return display_list
+        return self.display_list
+
+    def word(self, word):
+        font = tkinter.font.Font(
+            size=16,
+            weight=self.weight,
+            slant=self.style
+        )
+        w = font.measure(word) # 단어의 가로 길이
+        if self.cursor_x + w > WIDTH - HSTEP: #
+            self.cursor_y += font.metrics("linespace") * 1.25 # linespace(텍스트 높이)의 1.25배
+            self.cursor_x = HSTEP
+        self.display_list.append((self.cursor_x, self.cursor_y, word, font)) # 렌더링 대상 문자와 레이아웃 상의 좌표 튜플 저장
+        self.cursor_x += w + font.measure(" ") # split()으로 공백이 사라졌으므로 단어 가로 길이 + 공백 너비만큼 더하기
 
 SCROLL_STEP = 100
 class Browser:
@@ -110,16 +151,15 @@ class Browser:
     def load(self, url):
         self.canvas.create_rectangle(10, 20, 400, 300)
         self.canvas.create_oval(100, 100, 150, 150)
-        self.canvas.create_text(200, 150, text="Hi!")
+        self.canvas.create_text(200, 150, text="Hi!", anchor="nw") # anchor : 좌표의 기준을 텍스트의 북서쪽 모서리로 설정
 
         body = url.request()
-        text = lex(body)
-
-        self.display_list = layout(text)
+        tokens = lex(body)
+        self.display_list = Layout(tokens).display_list
         self.draw()
 
     def draw(self):
-        for x, y, c in self.display_list:
+        for x, y, c, font in self.display_list:
             if y > HEIGHT + self.scroll:
                 continue
             if y + VSTEP < self.scroll: # VSTEP 더하는 이유는 글자가 완전히 화면 밖으로 나가는 경우만 스킵하기 위함
