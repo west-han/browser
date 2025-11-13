@@ -104,12 +104,15 @@ HSTEP, VSTEP = 13, 18
 class Layout:
     def __init__(self, tokens):
         self.display_list = []
+        self.line = []
         self.cursor_x = VSTEP
         self.cursor_y = HSTEP
         self.weight = "normal"
         self.style = "roman"
+        self.size = 12
         for tok in tokens:
             self.token(tok)
+        self.flush()
 
     def token(self, tok):
         if isinstance(tok, Text):
@@ -123,21 +126,55 @@ class Layout:
             self.style = "bold"
         elif tok.tag == "/b":
             self.style = "normal"
+        elif tok.tag == 'small':
+            self.size -= 2
+        elif tok.tag == '/small':
+            self.size += 2
+        elif tok.tag == 'big':
+            self.size += 4
+        elif tok.tag == '/big':
+            self.size -= 4
+        elif tok.tag == 'br':
+            self.flush()
+        elif tok.tag == '/p':
+            self.flush()
+            self.cursor_y += VSTEP # 문단 사이 간격 추가
 
         return self.display_list
 
     def word(self, word):
         font = tkinter.font.Font(
-            size=16,
+            size=self.size,
             weight=self.weight,
             slant=self.style
         )
         w = font.measure(word) # 단어의 가로 길이
         if self.cursor_x + w > WIDTH - HSTEP: #
-            self.cursor_y += font.metrics("linespace") * 1.25 # linespace(텍스트 높이)의 1.25배
-            self.cursor_x = HSTEP
-        self.display_list.append((self.cursor_x, self.cursor_y, word, font)) # 렌더링 대상 문자와 레이아웃 상의 좌표 튜플 저장
+            self.flush()
+            # self.cursor_y += font.metrics("linespace") * 1.25 # linespace(텍스트 높이)의 1.25배
+            # self.cursor_x = HSTEP
+        # self.display_list.append((self.cursor_x, self.cursor_y, word, font)) # 렌더링 대상 문자와 레이아웃 상의 좌표 튜플 저장
+        self.line.append((self.cursor_x, word, font)) # 텍스트 수직 정렬을 맞추기 위해 display_list에 추가하기 전에 우선 y 위치 값이 없는 임시 데이터 저장
         self.cursor_x += w + font.measure(" ") # split()으로 공백이 사라졌으므로 단어 가로 길이 + 공백 너비만큼 더하기
+
+
+    # 1. 기준선에 맞춰 단어 정렬, display_list에 모든 단어 추가, cursor_x와 cursor_y 업데이트
+    def flush(self):
+        if not self.line: return
+        metrics = [font.metrics() for x, word, font in self.line]
+        max_ascent = max([metric["ascent"] for metric in metrics]) # cf. 폰트의 메트릭 - ascent, x-height, descent
+
+        baseline = self.cursor_y + 1.25 * max_ascent # self.y에서 leading + max_ascent만큼 아래를 기준선으로
+
+        for x, word, font in self.line:
+            y = baseline - font.metrics("ascent")
+            self.display_list.append((x, y, word, font))
+
+        max_descent = max([metric["descent"] for metric in metrics])
+        self.cursor_y = baseline + 1.25 * max_descent
+
+        self.cursor_x = HSTEP
+        self.line = []
 
 SCROLL_STEP = 100
 class Browser:
@@ -147,12 +184,9 @@ class Browser:
         self.canvas.pack() # Tk가 캔버스를 창에 배치하기 위해 호출해야 하는 메소드
         self.scroll = 0
         self.windows.bind("<Down>", self.scrolldown) # 이벤트핸들러 바인딩
+        self.display_list = []
 
     def load(self, url):
-        self.canvas.create_rectangle(10, 20, 400, 300)
-        self.canvas.create_oval(100, 100, 150, 150)
-        self.canvas.create_text(200, 150, text="Hi!", anchor="nw") # anchor : 좌표의 기준을 텍스트의 북서쪽 모서리로 설정
-
         body = url.request()
         tokens = lex(body)
         self.display_list = Layout(tokens).display_list
@@ -164,7 +198,7 @@ class Browser:
                 continue
             if y + VSTEP < self.scroll: # VSTEP 더하는 이유는 글자가 완전히 화면 밖으로 나가는 경우만 스킵하기 위함
                 continue
-            self.canvas.create_text(x, y - self.scroll, text=c)
+            self.canvas.create_text(x, y - self.scroll, text=c) # anchor="nw" : 좌표의 기준을 텍스트의 북서쪽 모서리로 설정
 
     def scrolldown(self, event):
         self.scroll += SCROLL_STEP
