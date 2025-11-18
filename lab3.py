@@ -2,6 +2,16 @@ from lab1 import URL
 import tkinter
 import tkinter.font
 
+FONTS = {}
+
+def get_font(size, weight, style):
+    key = (size, weight, style)
+    if key not in FONTS:
+        font = tkinter.font.Font(size=size, weight=weight, slant=style)
+        label = tkinter.Label(font=font)
+        FONTS[key] = (font, label)
+    return FONTS[key][0]
+
 class Text:
     def __init__(self, text):
         self.text = text
@@ -75,11 +85,12 @@ class Layout:
         return self.display_list
 
     def word(self, word):
-        font = tkinter.font.Font(
-            size=self.size,
-            weight=self.weight,
-            slant=self.style
-        )
+        # font = tkinter.font.Font(
+        #     size=self.size,
+        #     weight=self.weight,
+        #     slant=self.style
+        # )
+        font = get_font(self.size, self.weight, self.style) # font 직접 만드는 대신 글로벌 딕셔너리에서 조회(없으면 생성) -> 캐싱
         w = font.measure(word) # 단어의 가로 길이
         if self.cursor_x + w > WIDTH - HSTEP: #
             self.flush()
